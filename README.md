@@ -40,13 +40,13 @@ The script uses Discord's visible interface rather than mod-specific modules. Va
 6. Read the permanent-removal prompt and select **OK** if you want to continue.
 7. Leave Discord open until the console prints `Finished`.
 
-You do not need to open your profile first. The script opens your own full profile and selects Activity. If that view is closed while cleanup is running, it reopens the view and continues.
+You do not need to open your profile first. If your own Activity tab is already open, the script keeps it open. Otherwise, it opens your full profile and selects Activity. If that view is closed while cleanup is running, it reopens the view and continues.
 
 ## What happens after you run it
 
 1. A native confirmation prompt asks whether to begin.
-2. It clicks Discord's **Manage profile and status** control in the account panel.
-3. It opens **Your full profile** and selects the **Activity** tab.
+2. It reuses an open **Your full profile** Activity view when one is already present.
+3. Otherwise, it clicks **Manage profile and status**, opens **Your full profile**, and selects **Activity**.
 4. The script waits for the exact **Recent activity** heading.
 5. It considers only menu controls that appear after and below that heading.
 6. It opens one menu and requires an exact **Clear Game History** item.

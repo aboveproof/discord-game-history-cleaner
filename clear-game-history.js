@@ -63,14 +63,19 @@
         return null;
     };
 
-    const getFullProfile = () => {
+    const getOwnFullProfile = () => {
         const title = exact(
             document,
             '[role="heading"], h1, h2, h3',
             "Your full profile"
         );
 
-        if (title) return title.closest('[role="dialog"]');
+        return title?.closest('[role="dialog"]') ?? null;
+    };
+
+    const getFullProfile = () => {
+        const ownProfile = getOwnFullProfile();
+        if (ownProfile) return ownProfile;
 
         return [...document.querySelectorAll('[role="dialog"]')]
             .filter(visible)
@@ -78,7 +83,7 @@
     };
 
     const selectActivityTab = async () => {
-        const profile = getFullProfile();
+        const profile = getOwnFullProfile();
         if (!profile) return null;
 
         const activityTab = exact(
@@ -123,7 +128,7 @@
         accountButton.click();
         await sleep(700);
 
-        const directProfile = getFullProfile();
+        const directProfile = getOwnFullProfile();
         if (directProfile) return directProfile;
 
         const avatar = [...document.querySelectorAll('img, [role="img"]')]
@@ -154,16 +159,22 @@
         );
 
         (avatarButton ?? avatar).click();
-        return await waitFor(getFullProfile, 5000);
+        return await waitFor(getOwnFullProfile, 5000);
     };
 
     const openActivityView = async force => {
         if (force) await closeProfileUi();
 
         const currentHeading = getRecentActivityHeading();
-        if (currentHeading) return currentHeading;
+        const ownProfile = getOwnFullProfile();
 
-        if (getFullProfile()) return await selectActivityTab();
+        if (currentHeading && ownProfile?.contains(currentHeading)) {
+            return currentHeading;
+        }
+
+        if (ownProfile) return await selectActivityTab();
+
+        if (getFullProfile()) await closeProfileUi();
 
         const profile = await openFullProfileFromAccountPanel();
         if (!profile) return null;
@@ -172,7 +183,11 @@
     };
 
     const ensureActivityView = async force => {
-        let heading = force ? null : getRecentActivityHeading();
+        const currentHeading = getRecentActivityHeading();
+        const ownProfile = getOwnFullProfile();
+        let heading = !force && ownProfile?.contains(currentHeading)
+            ? currentHeading
+            : null;
 
         while (!heading && !window.__stopClearGameHistory) {
             console.log("Opening your profile Activity tab…");
@@ -238,7 +253,7 @@
 
     window.__stopClearGameHistory = false;
     let cleared = 0;
-    let view = await ensureActivityView(true);
+    let view = await ensureActivityView(false);
 
     console.log(
         "Clearing Recent activity only. " +
