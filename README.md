@@ -56,6 +56,7 @@ You do not need to open your profile first. If your own Activity tab is already 
 8. It clicks **Clear** and waits for the dialog to close.
 9. It pauses for 1.2 to 1.8 seconds before processing another entry.
 10. It scrolls the Activity view and repeats until no more entries are available.
+11. When Discord removes the Recent Activity section after the final deletion, it recognizes the still-selected Activity tab as empty and finishes normally.
 
 If the profile is closed, the Activity tab disappears, or a confirmation is interrupted, the script rebuilds its page references and resumes. If a removal appears stuck, it waits five seconds before retrying instead of clicking faster.
 
@@ -117,7 +118,9 @@ Recovery messages are not necessarily failures. For example, closing the profile
 
 ### Activity keeps reopening
 
-Keep Discord in English and avoid switching profile tabs during the run. If Discord changed the Activity label or profile structure, stop the script and open an issue with the console message and your Discord client version. Do not include your email address, token, or unrelated console logs.
+Update to the latest script first. Older versions mistook Discord removing the empty Recent Activity section for the profile being closed. The current version finishes when the Activity tab remains selected with no Recent Activity section.
+
+Keep Discord in English and avoid switching profile tabs during the run. If it still reopens, stop the script and open an issue with the console message and your Discord client version. Do not include your email address, token, or unrelated console logs.
 
 ### Confirmation was interrupted
 

@@ -100,6 +100,8 @@
             .find(dialog => exact(dialog, '[role="tab"]', "Activity")) ?? null;
     };
 
+    const emptyActivity = Symbol("emptyActivity");
+
     const selectActivityTab = async () => {
         const profile = getOwnFullProfile();
         if (!profile) return null;
@@ -110,8 +112,20 @@
             "Activity"
         );
 
-        activityTab?.click();
-        return await waitFor(getRecentActivityHeading, 8000);
+        if (!activityTab) return null;
+
+        if (activityTab.getAttribute("aria-selected") !== "true") {
+            activityTab.click();
+        }
+
+        const heading = await waitFor(getRecentActivityHeading, 8000);
+
+        if (heading) return heading;
+
+        return activityTab.isConnected &&
+            activityTab.getAttribute("aria-selected") === "true"
+            ? emptyActivity
+            : null;
     };
 
     const closeProfileUi = async () => {
@@ -203,25 +217,26 @@
     const ensureActivityView = async force => {
         const currentHeading = getRecentActivityHeading();
         const ownProfile = getOwnFullProfile();
-        let heading = !force && ownProfile?.contains(currentHeading)
+        let result = !force && ownProfile?.contains(currentHeading)
             ? currentHeading
             : null;
 
-        while (!heading && !window.__stopClearGameHistory) {
+        while (!result && !window.__stopClearGameHistory) {
             console.log("Opening your profile Activity tab…");
-            heading = await openActivityView(force);
+            result = await openActivityView(force);
             force = true;
 
-            if (!heading) {
+            if (!result) {
                 console.warn("Activity did not open. Retrying in 2 seconds.");
                 await sleep(2000);
             }
         }
 
-        if (!heading) return null;
+        if (!result) return null;
+        if (result === emptyActivity) return { empty: true };
 
-        const scroller = getScroller(heading);
-        return { heading, scroller, scope: scroller ?? document };
+        const scroller = getScroller(result);
+        return { heading: result, scroller, scope: scroller ?? document };
     };
 
     const findHistoryMenuButtons = ({ heading, scope }) =>
@@ -275,6 +290,8 @@
     );
 
     while (!window.__stopClearGameHistory) {
+        if (view?.empty) break;
+
         if (!view || !visible(view.heading)) {
             view = await ensureActivityView(false);
             continue;
