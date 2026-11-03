@@ -16,6 +16,24 @@
             visible(element) && element.textContent?.trim() === label
         );
 
+    const isClearHistoryLabel = value =>
+        /^Clear(?: .+)? History$/i.test(value) ||
+        value.toLowerCase() === "clear recent activity";
+
+    const findClearHistoryAction = root =>
+        [...root.querySelectorAll('[role="menuitem"], [role="menuitemradio"]')]
+            .find(element =>
+                visible(element) &&
+                isClearHistoryLabel(element.textContent?.trim() ?? "")
+            );
+
+    const hasClearHistoryHeading = root =>
+        [...root.querySelectorAll('[role="heading"], h1, h2, h3')]
+            .some(element =>
+                visible(element) &&
+                isClearHistoryLabel(element.textContent?.trim() ?? "")
+            );
+
     const waitFor = async (callback, timeout = 5000) => {
         const started = Date.now();
 
@@ -230,17 +248,13 @@
     const findClearMenu = () =>
         [...document.querySelectorAll('[role="menu"]')]
             .filter(visible)
-            .find(menu => exact(
-                menu,
-                '[role="menuitem"], [role="menuitemradio"]',
-                "Clear Game History"
-            ));
+            .find(findClearHistoryAction);
 
     const findConfirmation = () =>
         [...document.querySelectorAll('[role="dialog"]')]
             .filter(dialog =>
                 visible(dialog) &&
-                dialog.textContent?.includes("Clear Game History") &&
+                hasClearHistoryHeading(dialog) &&
                 exact(dialog, 'button, [role="button"]', "Clear")
             )
             .sort((left, right) => {
@@ -283,11 +297,8 @@
                 continue;
             }
 
-            const clearHistoryItem = exact(
-                menu,
-                '[role="menuitem"], [role="menuitemradio"]',
-                "Clear Game History"
-            );
+            const clearHistoryItem = findClearHistoryAction(menu);
+            const actionLabel = clearHistoryItem.textContent.trim();
 
             clearHistoryItem.click();
 
@@ -332,7 +343,8 @@
             cleared++;
             removed = true;
             console.log(
-                `Cleared ${cleared} history entr${cleared === 1 ? "y" : "ies"}.`
+                `Cleared ${cleared} activity entr${cleared === 1 ? "y" : "ies"} ` +
+                `with “${actionLabel}”.`
             );
 
             await sleep(randomDelay());

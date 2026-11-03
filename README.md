@@ -1,8 +1,8 @@
 <div align="center">
 
-# Discord Game History Cleaner
+# Discord Activity History Cleaner
 
-Clear the game entries in your Discord Recent Activity without clicking through every confirmation by hand.
+Clear removable game, listening, watching, and other entries from Discord Recent Activity without clicking through every confirmation by hand.
 
 [![License](https://img.shields.io/github/license/aboveproof/discord-game-history-cleaner?style=flat-square)](./LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/aboveproof/discord-game-history-cleaner?style=flat-square)](https://github.com/aboveproof/discord-game-history-cleaner/commits/main)
@@ -14,7 +14,9 @@ Clear the game entries in your Discord Recent Activity without clicking through 
 
 ## What this is
 
-Discord exposes a **Clear Game History** action for each entry in your profile's Activity tab. It does not provide a clear-all button. This script repeats Discord's existing UI flow: open an entry's menu, choose **Clear Game History**, confirm **Clear**, wait for Discord to finish, then move to the next entry.
+Discord exposes a clear-history action on removable entries in your profile's Activity tab. The wording can vary with the activity type, such as **Clear Game History**, **Clear Activity History**, or **Clear Listening History**. Discord does not provide a clear-all button.
+
+This script repeats Discord's existing UI flow: open an entry's menu, select its `Clear … History` action, confirm **Clear**, wait for Discord to finish, then move to the next entry. It also recognizes **Clear Recent Activity** if Discord uses that wording.
 
 The removal is account-side because the script clicks Discord's real confirmation button. It does not merely hide cards with CSS or remove elements from the page.
 
@@ -49,8 +51,8 @@ You do not need to open your profile first. If your own Activity tab is already 
 3. Otherwise, it clicks **Manage profile and status**, opens **Your full profile**, and selects **Activity**.
 4. The script waits for the exact **Recent activity** heading.
 5. It considers only menu controls that appear after and below that heading.
-6. It opens one menu and requires an exact **Clear Game History** item.
-7. It requires a dialog containing both **Clear Game History** and a **Clear** button.
+6. It opens one menu and requires an action matching `Clear … History` or **Clear Recent Activity**.
+7. It requires a confirmation dialog with the same clear-history form and an exact **Clear** button.
 8. It clicks **Clear** and waits for the dialog to close.
 9. It pauses for 1.2 to 1.8 seconds before processing another entry.
 10. It scrolls the Activity view and repeats until no more entries are available.
@@ -62,7 +64,7 @@ If the profile is closed, the Activity tab disappears, or a confirmation is inte
 Like every console script, it runs in the page you paste it into. This script uses that access for a small set of operations:
 
 - Read visible Discord interface elements.
-- Click the existing game-history menu and confirmation controls.
+- Click the existing activity-history menu and confirmation controls.
 - Open the current user's profile through Discord's visible account-panel controls.
 - Close and reopen the full-profile dialog when recovery is needed.
 - Write progress and warnings to the console.
@@ -83,9 +85,9 @@ You can verify the network claim yourself: search [`clear-game-history.js`](./cl
 
 ## Scope protection
 
-The active RPC or current-status card sits outside the Recent Activity list. The script requires each candidate control to be both later in the document and visually below the exact **Recent activity** heading. A menu is ignored unless it contains the exact text **Clear Game History**.
+The active RPC or current-status card sits outside the Recent Activity list. The script requires each candidate control to be both later in the document and visually below the exact **Recent activity** heading. A menu is ignored unless it contains an English clear-history action matching `Clear … History` or **Clear Recent Activity**.
 
-The final confirmation has another independent check. The script only accepts a visible dialog that contains **Clear Game History** and an exact **Clear** button. Missing or unexpected UI triggers recovery instead of a blind click.
+The final confirmation has another independent check. The script only accepts a visible dialog with a matching clear-history heading and an exact **Clear** button. Missing or unexpected UI triggers recovery instead of a blind click.
 
 These checks reduce the chance of clicking the wrong control, but Discord can change its interface at any time. Stop the run if the client behaves unexpectedly.
 
@@ -104,8 +106,8 @@ The running script checks this flag while waiting for interface changes and betw
 ```text
 Opening your profile Activity tab…
 Clearing Recent activity only. Run window.__stopClearGameHistory = true to stop.
-Cleared 1 history entry.
-Cleared 2 history entries.
+Cleared 1 activity entry with “Clear Game History”.
+Cleared 2 activity entries with “Clear Listening History”.
 Finished. Cleared 2 history entries.
 ```
 
@@ -132,6 +134,8 @@ Discord and installed plugins produce their own console messages. A stream-previ
 ## Limits
 
 - Discord describes Recent Activity as activity from the last 30 days. The script can only remove entries Discord displays there.
+- An entry is skipped if Discord does not expose a clear-history action for it.
+- Clearing history does not disable new activity collection or sharing. Change Discord's Activity Privacy settings separately if that is your goal.
 - The selectors currently target Discord's English labels.
 - Vanilla Discord desktop must have Developer Tools available; Discord web works without client modifications.
 - Discord interface updates can break the workflow without notice.
