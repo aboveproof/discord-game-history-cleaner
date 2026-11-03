@@ -3,7 +3,7 @@
     const randomDelay = () => 1200 + Math.random() * 600;
 
     const visible = element => {
-        if (!element) return false;
+        if (!element?.isConnected) return false;
 
         const rect = element.getBoundingClientRect();
         return rect.width > 0 &&
@@ -20,6 +20,8 @@
         const started = Date.now();
 
         while (Date.now() - started < timeout) {
+            if (window.__stopClearGameHistory) return null;
+
             const result = callback();
             if (result) return result;
             await sleep(75);
@@ -36,52 +38,108 @@
         }));
     };
 
-    if (!confirm("Permanently clear every entry under Recent activity?")) return;
-
-    const heading = exact(
+    const getRecentActivityHeading = () => exact(
         document,
         '[role="heading"], h1, h2, h3, div, span',
         "Recent activity"
     );
 
-    if (!heading) {
-        throw new Error(
-            'Open your profile Activity page so "Recent activity" is visible.'
-        );
-    }
+    const getScroller = heading => {
+        let element = heading.parentElement;
 
-    let scroller = heading.parentElement;
+        while (element && element !== document.body) {
+            const style = getComputedStyle(element);
 
-    while (scroller && scroller !== document.body) {
-        const style = getComputedStyle(scroller);
+            if (
+                /(auto|scroll)/.test(style.overflowY) &&
+                element.scrollHeight > element.clientHeight + 10
+            ) {
+                return element;
+            }
 
-        if (
-            /(auto|scroll)/.test(style.overflowY) &&
-            scroller.scrollHeight > scroller.clientHeight + 10
-        ) {
-            break;
+            element = element.parentElement;
         }
 
-        scroller = scroller.parentElement;
-    }
-
-    const scope = scroller ?? document;
-    if (scroller) scroller.scrollTop = 0;
-
-    const belongsToHistorySection = button => {
-        const position = heading.compareDocumentPosition(button);
-
-        return Boolean(position & Node.DOCUMENT_POSITION_FOLLOWING) &&
-            button.getBoundingClientRect().top >=
-                heading.getBoundingClientRect().bottom - 1;
+        return null;
     };
 
-    const findHistoryMenuButtons = () =>
+    const openActivityView = async force => {
+        const common = globalThis.Vencord?.Webpack?.Common;
+
+        if (!common) {
+            throw new Error(
+                "This script requires the Equicord or Vencord desktop client."
+            );
+        }
+
+        if (force) {
+            common.UserProfileActions.closeUserProfileModal();
+            await sleep(300);
+        }
+
+        const user = common.UserStore.getCurrentUser();
+        const guildId = common.SelectedGuildStore.getGuildId();
+
+        common.UserProfileActions.openUserProfileModal({
+            userId: user.id,
+            guildId,
+            channelId: common.SelectedChannelStore.getChannelId(),
+            analyticsLocation: {
+                page: guildId ? "Guild Channel" : "DM Channel",
+                section: "Profile Popout"
+            },
+            tabSection: "ACTIVITY"
+        });
+
+        let heading = await waitFor(getRecentActivityHeading, 2000);
+        if (heading) return heading;
+
+        const activityTab = [...document.querySelectorAll('[role="dialog"]')]
+            .filter(visible)
+            .map(dialog => exact(
+                dialog,
+                '[role="tab"], button, [role="button"]',
+                "Activity"
+            ))
+            .find(Boolean);
+
+        activityTab?.click();
+        return await waitFor(getRecentActivityHeading, 8000);
+    };
+
+    const ensureActivityView = async force => {
+        let heading = force ? null : getRecentActivityHeading();
+
+        while (!heading && !window.__stopClearGameHistory) {
+            console.log("Opening your profile Activity tab…");
+            heading = await openActivityView(force);
+            force = true;
+
+            if (!heading) {
+                console.warn("Activity did not open. Retrying in 2 seconds.");
+                await sleep(2000);
+            }
+        }
+
+        if (!heading) return null;
+
+        const scroller = getScroller(heading);
+        return { heading, scroller, scope: scroller ?? document };
+    };
+
+    const findHistoryMenuButtons = ({ heading, scope }) =>
         [...scope.querySelectorAll('button, [role="button"]')]
             .filter(button => {
-                if (!visible(button) || !belongsToHistorySection(button)) {
-                    return false;
-                }
+                if (!visible(button)) return false;
+
+                const position = heading.compareDocumentPosition(button);
+                const afterHeading = Boolean(
+                    position & Node.DOCUMENT_POSITION_FOLLOWING
+                );
+                const belowHeading = button.getBoundingClientRect().top >=
+                    heading.getBoundingClientRect().bottom - 1;
+
+                if (!afterHeading || !belowHeading) return false;
 
                 const label = button.getAttribute("aria-label") ?? "";
                 const text = button.textContent?.trim() ?? "";
@@ -90,8 +148,33 @@
                     /^(\.{3}|…|⋯)$/.test(text);
             });
 
+    const findClearMenu = () =>
+        [...document.querySelectorAll('[role="menu"]')]
+            .filter(visible)
+            .find(menu => exact(
+                menu,
+                '[role="menuitem"], [role="menuitemradio"]',
+                "Clear Game History"
+            ));
+
+    const findConfirmation = () =>
+        [...document.querySelectorAll('[role="dialog"]')]
+            .filter(dialog =>
+                visible(dialog) &&
+                dialog.textContent?.includes("Clear Game History") &&
+                exact(dialog, 'button, [role="button"]', "Clear")
+            )
+            .sort((left, right) => {
+                const a = left.getBoundingClientRect();
+                const b = right.getBoundingClientRect();
+                return a.width * a.height - b.width * b.height;
+            })[0] ?? null;
+
+    if (!confirm("Permanently clear every entry under Recent activity?")) return;
+
     window.__stopClearGameHistory = false;
     let cleared = 0;
+    let view = await ensureActivityView(false);
 
     console.log(
         "Clearing Recent activity only. " +
@@ -99,24 +182,21 @@
     );
 
     while (!window.__stopClearGameHistory) {
-        let removed = false;
+        if (!view || !visible(view.heading)) {
+            view = await ensureActivityView(false);
+            continue;
+        }
 
-        for (const menuButton of findHistoryMenuButtons()) {
+        let removed = false;
+        let recover = false;
+        const menuButtons = findHistoryMenuButtons(view);
+
+        for (const menuButton of menuButtons) {
             if (window.__stopClearGameHistory) break;
 
             menuButton.click();
 
-            const menu = await waitFor(() =>
-                [...document.querySelectorAll('[role="menu"]')]
-                    .filter(visible)
-                    .find(element =>
-                        exact(
-                            element,
-                            '[role="menuitem"], [role="menuitemradio"]',
-                            "Clear Game History"
-                        )
-                    )
-            );
+            const menu = await waitFor(findClearMenu, 2500);
 
             if (!menu) {
                 pressEscape();
@@ -130,29 +210,18 @@
                 "Clear Game History"
             );
 
-            if (!clearHistoryItem) {
-                pressEscape();
-                continue;
-            }
-
             clearHistoryItem.click();
 
-            const confirmation = await waitFor(() => {
-                const title = exact(
-                    document,
-                    '[role="heading"], h1, h2, h3',
-                    "Clear Game History"
-                );
-
-                return title?.closest('[role="dialog"]') ?? null;
-            });
+            const confirmation = await waitFor(findConfirmation, 5000);
 
             if (!confirmation) {
+                if (window.__stopClearGameHistory) break;
+
                 pressEscape();
                 console.warn(
-                    "Discord did not open the confirmation. Stopping safely."
+                    "Confirmation was interrupted. Reopening Activity and continuing."
                 );
-                window.__stopClearGameHistory = true;
+                recover = true;
                 break;
             }
 
@@ -162,25 +231,22 @@
                 "Clear"
             );
 
-            if (!clearButton) {
-                pressEscape();
-                console.warn(
-                    "Confirmation button was not found. Stopping safely."
-                );
-                window.__stopClearGameHistory = true;
-                break;
-            }
-
             clearButton.click();
 
-            const closed = await waitFor(() => !visible(confirmation), 7000);
+            const closed = await waitFor(
+                () => !visible(confirmation),
+                7000
+            );
 
             if (!closed) {
+                if (window.__stopClearGameHistory) break;
+
+                pressEscape();
                 console.warn(
-                    "Discord did not finish the removal. " +
-                    "Stopping in case of a rate limit."
+                    "Removal did not finish. Waiting 5 seconds before retrying."
                 );
-                window.__stopClearGameHistory = true;
+                await sleep(5000);
+                recover = true;
                 break;
             }
 
@@ -195,19 +261,25 @@
         }
 
         if (removed) continue;
-        if (!scroller) break;
 
-        const before = scroller.scrollTop;
-        const maximum = scroller.scrollHeight - scroller.clientHeight;
+        if (recover) {
+            view = await ensureActivityView(true);
+            continue;
+        }
 
-        scroller.scrollTop = Math.min(
+        if (!view.scroller) break;
+
+        const before = view.scroller.scrollTop;
+        const maximum = view.scroller.scrollHeight - view.scroller.clientHeight;
+
+        view.scroller.scrollTop = Math.min(
             maximum,
-            before + Math.max(300, scroller.clientHeight * 0.75)
+            before + Math.max(300, view.scroller.clientHeight * 0.75)
         );
 
         await sleep(500);
 
-        if (scroller.scrollTop === before) break;
+        if (view.scroller.scrollTop === before) break;
     }
 
     console.log(

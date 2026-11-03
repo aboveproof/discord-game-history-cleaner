@@ -1,60 +1,165 @@
+<div align="center">
+
 # Discord Game History Cleaner
 
-A console script for clearing every entry Discord exposes under Recent activity.
+Clear the game entries in your Discord Recent Activity without clicking through every confirmation by hand.
+
+[![License](https://img.shields.io/github/license/aboveproof/discord-game-history-cleaner?style=flat-square)](./LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/aboveproof/discord-game-history-cleaner?style=flat-square)](https://github.com/aboveproof/discord-game-history-cleaner/commits/main)
+![Runtime](https://img.shields.io/badge/runtime-Equicord%20%7C%20Vencord-5865F2?style=flat-square)
+
+**One file. No dependencies. No token handling.**
+
+</div>
 
 ## What this is
 
-Discord only provides a per-entry Clear Game History action. This script operates that same interface repeatedly, confirms each removal, and scrolls through the list until no entries remain.
+Discord exposes a **Clear Game History** action for each entry in your profile's Activity tab. It does not provide a clear-all button. This script repeats Discord's existing UI flow: open an entry's menu, choose **Clear Game History**, confirm **Clear**, wait for Discord to finish, then move to the next entry.
 
-It does not extract your token, call undocumented API endpoints, or hide entries only on your device. Each removal uses Discord's normal account-side confirmation flow.
+The removal is account-side because the script clicks Discord's real confirmation button. It does not merely hide cards with CSS or remove elements from the page.
 
-## Repository structure
+> [!IMPORTANT]
+> Read [`clear-game-history.js`](./clear-game-history.js) before running it. Anything pasted into Discord's console executes inside your signed-in client. Do not use a copy from a random paste site or shortened link.
 
-```text
-discord-game-history-cleaner/
-├── clear-game-history.js    # Pasteable console script
-├── README.md
-└── LICENSE
-```
+## Requirements
+
+- Equicord or Vencord desktop client
+- Discord displayed in English
+- Developer Tools access
+- Your Discord account already signed in
+
+The script uses client modules exposed by Equicord and Vencord to open your own profile. It will not work in an unmodified Discord client where those modules are unavailable.
 
 ## Quick start
 
-1. Open Discord in English through the desktop or web client.
-2. Open your full profile and select **Activity** so **Recent activity** is visible.
-3. Open Developer Tools and select the **Console** tab.
-4. Review and copy all of [`clear-game-history.js`](./clear-game-history.js).
-5. Paste it into the console, press Enter, and accept the confirmation.
-6. Leave the Activity page open until the console reports that it finished.
+1. Open [`clear-game-history.js`](./clear-game-history.js) on GitHub.
+2. Read the file, then copy its complete contents.
+3. Open Discord Developer Tools with `Ctrl+Shift+I` on Windows or Linux.
+4. Select the **Console** tab.
+5. Paste the script and press Enter.
+6. Read the permanent-removal prompt and select **OK** if you want to continue.
+7. Leave Discord open until the console prints `Finished`.
 
-Equicord and Vencord desktop users can usually open Developer Tools with `Ctrl+Shift+I` on Windows or Linux. Browser users can use their browser's standard Developer Tools shortcut.
+You do not need to open your profile first. The script opens your own full profile and selects Activity. If that view is closed while cleanup is running, it reopens the view and continues.
 
-## What it does
+## What happens after you run it
 
-- Restricts clicks to controls positioned after the **Recent activity** heading.
-- Ignores the active RPC and current-status area above that heading.
-- Requires the exact **Clear Game History** menu item and confirmation dialog.
-- Waits for each removal to finish before continuing.
-- Adds a short randomized pause between removals.
-- Stops if Discord does not show or close the expected confirmation.
+1. A native confirmation prompt asks whether to begin.
+2. Equicord or Vencord's exposed `UserStore` identifies the currently signed-in user.
+3. `UserProfileActions` opens that user's full profile with the Activity section requested.
+4. The script waits for the exact **Recent activity** heading.
+5. It considers only menu controls that appear after and below that heading.
+6. It opens one menu and requires an exact **Clear Game History** item.
+7. It requires a dialog containing both **Clear Game History** and a **Clear** button.
+8. It clicks **Clear** and waits for the dialog to close.
+9. It pauses for 1.2 to 1.8 seconds before processing another entry.
+10. It scrolls the Activity view and repeats until no more entries are available.
+
+If the profile is closed, the Activity tab disappears, or a confirmation is interrupted, the script rebuilds its page references and resumes. If a removal appears stuck, it waits five seconds before retrying instead of clicking faster.
+
+## What the script can access
+
+Like every console script, it runs in the page you paste it into. This script uses that access for a small set of operations:
+
+- Read visible Discord interface elements.
+- Click the existing game-history menu and confirmation controls.
+- Read the current user from Equicord or Vencord's exposed `UserStore`.
+- Open and close the current user's profile through `UserProfileActions`.
+- Write progress and warnings to the console.
+- Set one stop flag on `window`.
+
+## What the script does not do
+
+- It does not read, print, copy, or upload your Discord token.
+- It does not use `fetch`, `XMLHttpRequest`, `WebSocket`, or an external server.
+- It does not ask for a password, API key, webhook, or bot token.
+- It does not send messages, join servers, change settings, or modify Rich Presence.
+- It does not call Discord's private deletion endpoint directly.
+- It does not bypass rate limits or remove Discord's confirmation step.
+- It does not install a plugin or remain active after the page reloads.
+
+You can verify the network claim yourself: search [`clear-game-history.js`](./clear-game-history.js) for `fetch`, `XMLHttpRequest`, `WebSocket`, `Authorization`, and `token`. None are used.
+
+## Scope protection
+
+The active RPC or current-status card sits outside the Recent Activity list. The script requires each candidate control to be both later in the document and visually below the exact **Recent activity** heading. A menu is ignored unless it contains the exact text **Clear Game History**.
+
+The final confirmation has another independent check. The script only accepts a visible dialog that contains **Clear Game History** and an exact **Clear** button. Missing or unexpected UI triggers recovery instead of a blind click.
+
+These checks reduce the chance of clicking the wrong control, but Discord can change its interface at any time. Stop the run if the client behaves unexpectedly.
 
 ## Stop a running cleanup
 
-Run this in the console:
+Paste this into the console:
 
 ```js
 window.__stopClearGameHistory = true
 ```
 
-## Limits and safety
+The running script checks this flag while waiting for interface changes and between entries. Reloading Discord also ends the script.
 
-Discord currently describes Recent Activity as activity from the last 30 days. The script can only remove entries Discord exposes in that view.
+## Expected console output
 
-The script depends on Discord's current English interface and may need an update if Discord changes its labels or page structure. Inspect the source before pasting it. Console scripts run with access to your open Discord session.
+```text
+Opening your profile Activity tab…
+Clearing Recent activity only. Run window.__stopClearGameHistory = true to stop.
+Cleared 1 history entry.
+Cleared 2 history entries.
+Finished. Cleared 2 history entries.
+```
 
-The pacing is deliberately conservative, but no unofficial automation can guarantee that Discord will never rate-limit an action or take account-related measures. Use it at your own risk and do not modify it to bypass rate limits.
+Recovery messages are not necessarily failures. For example, closing the profile produces a reopen message and the cleanup continues.
 
-See Discord's [Activity Sharing FAQ](https://support.discord.com/hc/en-us/articles/7931156448919-Activity-Sharing-on-Discord-FAQ) for the manual Clear Game History flow.
+## Troubleshooting
+
+### Activity keeps reopening
+
+Keep Discord in English and avoid switching profile tabs during the run. If Discord changed the Activity label or profile structure, stop the script and open an issue with the console message and your Discord client version. Do not include your email address, token, or unrelated console logs.
+
+### Confirmation was interrupted
+
+The menu or modal disappeared before the expected control was found. The script closes the incomplete UI, reopens Activity, and retries after rebuilding its references.
+
+### Removal did not finish
+
+Discord did not close the confirmation within seven seconds. The script waits five seconds before recovery. This prevents a slow client or temporary rate limit from turning into rapid repeated clicks.
+
+### Discord prints unrelated 404, CORS, or stream errors
+
+Discord and installed plugins produce their own console messages. A stream-preview `404` or third-party plugin CORS error is not generated by this script. Progress messages from this project begin with `Opening`, `Clearing`, `Cleared`, `Confirmation`, `Removal`, `Stopped`, or `Finished`.
+
+## Limits
+
+- Discord describes Recent Activity as activity from the last 30 days. The script can only remove entries Discord displays there.
+- The selectors currently target Discord's English labels.
+- Discord interface updates can break the workflow without notice.
+- The randomized delay is conservative, but no unofficial automation can promise zero account risk.
+- The script cannot restore an entry after Discord removes it.
+
+This project does not claim affiliation with Discord, Equicord, or Vencord. Use it at your own risk. Do not modify it to bypass rate limits.
+
+Discord documents the manual removal flow in its [Activity Sharing FAQ](https://support.discord.com/hc/en-us/articles/7931156448919-Activity-Sharing-on-Discord-FAQ).
+
+## Project layout
+
+```text
+discord-game-history-cleaner/
+├── clear-game-history.js    # Complete pasteable script
+├── README.md                # Usage, behavior, and audit notes
+└── LICENSE                  # MIT license
+```
+
+## Reporting a problem
+
+Open a [GitHub issue](https://github.com/aboveproof/discord-game-history-cleaner/issues) with:
+
+- The progress or warning message printed by this script.
+- Whether the profile or confirmation was visible.
+- Your Equicord or Vencord version.
+- Your Discord client version.
+
+Remove account identifiers and unrelated logs before posting. Never publish your token, email address, or full console dump.
 
 ## License
 
-MIT. Use freely, modify carefully.
+[MIT](./LICENSE). Review the code, change it if needed, and keep the license with redistributed copies.
