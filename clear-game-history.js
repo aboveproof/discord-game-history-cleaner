@@ -63,48 +63,112 @@
         return null;
     };
 
-    const openActivityView = async force => {
-        const common = globalThis.Vencord?.Webpack?.Common;
+    const getFullProfile = () => {
+        const title = exact(
+            document,
+            '[role="heading"], h1, h2, h3',
+            "Your full profile"
+        );
 
-        if (!common) {
-            throw new Error(
-                "This script requires the Equicord or Vencord desktop client."
-            );
-        }
+        if (title) return title.closest('[role="dialog"]');
 
-        if (force) {
-            common.UserProfileActions.closeUserProfileModal();
-            await sleep(300);
-        }
-
-        const user = common.UserStore.getCurrentUser();
-        const guildId = common.SelectedGuildStore.getGuildId();
-
-        common.UserProfileActions.openUserProfileModal({
-            userId: user.id,
-            guildId,
-            channelId: common.SelectedChannelStore.getChannelId(),
-            analyticsLocation: {
-                page: guildId ? "Guild Channel" : "DM Channel",
-                section: "Profile Popout"
-            },
-            tabSection: "ACTIVITY"
-        });
-
-        let heading = await waitFor(getRecentActivityHeading, 2000);
-        if (heading) return heading;
-
-        const activityTab = [...document.querySelectorAll('[role="dialog"]')]
+        return [...document.querySelectorAll('[role="dialog"]')]
             .filter(visible)
-            .map(dialog => exact(
-                dialog,
-                '[role="tab"], button, [role="button"]',
-                "Activity"
-            ))
-            .find(Boolean);
+            .find(dialog => exact(dialog, '[role="tab"]', "Activity")) ?? null;
+    };
+
+    const selectActivityTab = async () => {
+        const profile = getFullProfile();
+        if (!profile) return null;
+
+        const activityTab = exact(
+            profile,
+            '[role="tab"], button, [role="button"]',
+            "Activity"
+        );
 
         activityTab?.click();
         return await waitFor(getRecentActivityHeading, 8000);
+    };
+
+    const closeProfileUi = async () => {
+        const profile = getFullProfile();
+        const closeButton = profile && (
+            profile.querySelector('button[aria-label="Close"]') ||
+            exact(profile, 'button, [role="button"]', "Close")
+        );
+
+        if (closeButton) closeButton.click();
+        pressEscape();
+        await sleep(300);
+    };
+
+    const openFullProfileFromAccountPanel = async () => {
+        const accountRegion = document.querySelector(
+            '[aria-label="User status and settings"]'
+        );
+        const accountScope = accountRegion ?? document;
+        const accountButton = [...accountScope.querySelectorAll('button, [role="button"]')]
+            .find(element =>
+                visible(element) &&
+                /^(Manage profile and status|Set Status|User Profile)$/i.test(
+                    element.getAttribute("aria-label") ?? ""
+                )
+            );
+
+        if (!accountButton) return null;
+
+        const existingElements = new Set(document.querySelectorAll("*"));
+        const accountRect = accountButton.getBoundingClientRect();
+        accountButton.click();
+        await sleep(700);
+
+        const directProfile = getFullProfile();
+        if (directProfile) return directProfile;
+
+        const avatar = [...document.querySelectorAll('img, [role="img"]')]
+            .filter(element => {
+                if (existingElements.has(element) || !visible(element)) return false;
+
+                const rect = element.getBoundingClientRect();
+                const square = Math.abs(rect.width - rect.height) <= 20;
+                const insideAccountColumn = rect.left >= accountRect.left &&
+                    rect.right <= accountRect.right;
+
+                return square &&
+                    insideAccountColumn &&
+                    rect.top < accountRect.top &&
+                    rect.width >= 48 &&
+                    rect.width <= 140;
+            })
+            .sort((left, right) => {
+                const a = left.getBoundingClientRect();
+                const b = right.getBoundingClientRect();
+                return b.width * b.height - a.width * a.height || a.top - b.top;
+            })[0];
+
+        if (!avatar) return null;
+
+        const avatarButton = avatar.closest(
+            'button, [role="button"], [tabindex="0"]'
+        );
+
+        (avatarButton ?? avatar).click();
+        return await waitFor(getFullProfile, 5000);
+    };
+
+    const openActivityView = async force => {
+        if (force) await closeProfileUi();
+
+        const currentHeading = getRecentActivityHeading();
+        if (currentHeading) return currentHeading;
+
+        if (getFullProfile()) return await selectActivityTab();
+
+        const profile = await openFullProfileFromAccountPanel();
+        if (!profile) return null;
+
+        return await selectActivityTab();
     };
 
     const ensureActivityView = async force => {
@@ -174,7 +238,7 @@
 
     window.__stopClearGameHistory = false;
     let cleared = 0;
-    let view = await ensureActivityView(false);
+    let view = await ensureActivityView(true);
 
     console.log(
         "Clearing Recent activity only. " +
